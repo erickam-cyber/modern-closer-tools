@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Modern Closer — Focus Timer</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=Space+Mono:wght@400;700&display=swap');
+
+  :root {
+    --bg:         #080807;
+    --surface:    #0f0e0c;
+    --card:       #131210;
+    --border:     #2a2620;
+    --gold:       #c9a84c;
+    --gold-hi:    #e8c96a;
+    --gold-lo:    #1e1a0e;
+    --gold-dim:   #6b5a28;
+    --text:       #f0ead8;
+    --muted:      #6b6254;
+    --pause-col:  #5a4a1a;
+    --pause-hi:   #c9a84c;
+    --danger:     #8b3a3a;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Cormorant Garamond', serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 16px;
+    gap: 20px;
+  }
+
+  /* ── Header ── */
+  .header { text-align: center; }
+
+  .brand {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 10px;
+    font-weight: 300;
+    letter-spacing: 0.35em;
+    text-transform: uppercase;
+    color: var(--gold-dim);
+    margin-bottom: 4px;
+  }
+
+  .divider-line {
+    width: 48px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--gold-dim), transparent);
+    margin: 6px auto;
+  }
+
+  .mode-label {
+    font-size: 12px;
+    font-weight: 300;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--gold);
+    min-height: 18px;
+    transition: color 0.4s, opacity 0.4s;
+  }
+  .mode-label.pause { color: var(--gold-hi); opacity: 0.7; }
+
+  /* ── Timer card ── */
+  .timer-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 40px 48px 36px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 28px;
+    width: 100%;
+    max-width: 340px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Corner accents */
+  .timer-card::before,
+  .timer-card::after {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    border-color: var(--gold-dim);
+    border-style: solid;
+    opacity: 0.6;
+  }
+  .timer-card::before { top: 8px; left: 8px; border-width: 1px 0 0 1px; }
+  .timer-card::after  { bottom: 8px; right: 8px; border-width: 0 1px 1px 0; }
+
+  /* Ambient glow behind ring */
+  .glow {
+    position: absolute;
+    top: -40px; left: 50%;
+    transform: translateX(-50%);
+    width: 180px; height: 180px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(201,168,76,0.07) 0%, transparent 70%);
+    pointer-events: none;
+    transition: opacity 0.8s;
+  }
+  .pause-mode .glow { opacity: 0.4; }
+
+  /* Ring SVG */
+  .ring-wrap {
+    position: relative;
+    width: 172px;
+    height: 172px;
+  }
+  .ring-wrap svg {
+    transform: rotate(-90deg);
+    width: 172px;
+    height: 172px;
+  }
+  .ring-track { fill: none; stroke: #1a1810; stroke-width: 2; }
+  .ring-tick  { fill: none; stroke: var(--border); stroke-width: 1; opacity: 0.5; }
+  .ring-progress {
+    fill: none;
+    stroke: var(--gold);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-dasharray: 477;
+    stroke-dashoffset: 0;
+    transition: stroke-dashoffset 1s linear, stroke 0.6s;
+    filter: drop-shadow(0 0 4px rgba(201,168,76,0.4));
+  }
+  .ring-progress.pause {
+    stroke: var(--gold-hi);
+    filter: drop-shadow(0 0 4px rgba(232,201,106,0.25));
+  }
+
+  .time-display {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+  }
+  .time-digits {
+    font-family: 'Space Mono', monospace;
+    font-size: 38px;
+    font-weight: 400;
+    color: var(--text);
+    letter-spacing: 2px;
+    line-height: 1;
+  }
+  .session-count {
+    font-size: 9px;
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 300;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  /* Pips */
+  .sessions-log {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: center;
+  }
+  .pip {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: transparent;
+    transition: background 0.5s, border-color 0.5s;
+  }
+  .pip.done      { background: var(--gold); border-color: var(--gold); box-shadow: 0 0 5px rgba(201,168,76,0.5); }
+  .pip.pause-done { background: var(--gold-hi); border-color: var(--gold-hi); opacity: 0.6; }
+
+  /* Controls */
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+  .btn-icon {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    width: 36px; height: 36px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    color: var(--muted);
+    transition: border-color 0.2s, color 0.2s;
+    flex-shrink: 0;
+  }
+  .btn-icon:hover { border-color: var(--gold-dim); color: var(--gold); }
+  .btn-icon svg { width: 14px; height: 14px; }
+
+  .btn-main {
+    background: transparent;
+    border: 1px solid var(--gold-dim);
+    border-radius: 2px;
+    padding: 0 40px;
+    height: 44px;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--gold);
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s, color 0.2s, box-shadow 0.2s;
+    position: relative;
+  }
+  .btn-main:hover {
+    background: rgba(201,168,76,0.06);
+    border-color: var(--gold);
+    box-shadow: 0 0 12px rgba(201,168,76,0.12);
+  }
+  .btn-main:active { opacity: 0.8; }
+  .btn-main.pause-mode {
+    border-color: var(--gold-dim);
+    color: var(--gold-hi);
+    opacity: 0.75;
+  }
+
+  /* ── Focus bar ── */
+  .focus-bar {
+    width: 100%;
+    max-width: 340px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 14px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    position: relative;
+  }
+  .focus-bar::before,
+  .focus-bar::after {
+    content: '';
+    position: absolute;
+    width: 10px; height: 10px;
+    border-color: var(--gold-dim);
+    border-style: solid;
+    opacity: 0.4;
+  }
+  .focus-bar::before { top: 5px; left: 5px; border-width: 1px 0 0 1px; }
+  .focus-bar::after  { bottom: 5px; right: 5px; border-width: 0 1px 1px 0; }
+
+  .focus-bar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .focus-title {
+    font-size: 9px;
+    font-weight: 300;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .toggle-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+  }
+  .toggle-track {
+    width: 32px; height: 18px;
+    background: var(--border);
+    border-radius: 9px;
+    position: relative;
+    transition: background 0.25s;
+  }
+  .toggle-track.on { background: var(--gold-dim); }
+  .toggle-thumb {
+    position: absolute;
+    top: 3px; left: 3px;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: transform 0.25s, background 0.25s;
+  }
+  .toggle-track.on .toggle-thumb { transform: translateX(14px); background: var(--gold); }
+  .toggle-label {
+    font-size: 10px;
+    font-weight: 300;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+  }
+
+  .blocklist-section {
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .blocklist-section.visible { display: flex; }
+
+  .blocklist-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    min-height: 24px;
+  }
+  .block-tag {
+    background: var(--gold-lo);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    padding: 2px 8px 2px 10px;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 12px;
+    color: var(--gold-dim);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .block-tag button {
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1;
+    padding: 0;
+    display: flex;
+    align-items: center;
+  }
+  .block-tag button:hover { color: var(--danger); }
+
+  .add-block-row {
+    display: flex;
+    gap: 6px;
+  }
+  .add-block-input {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    padding: 5px 10px;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 13px;
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .add-block-input::placeholder { color: var(--muted); font-style: italic; }
+  .add-block-input:focus { border-color: var(--gold-dim); }
+
+  .btn-add {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    padding: 5px 12px;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--gold-dim);
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+    white-space: nowrap;
+  }
+  .btn-add:hover { border-color: var(--gold-dim); color: var(--gold); }
+
+  .focus-active-notice {
+    font-size: 10px;
+    font-style: italic;
+    color: var(--muted);
+    display: none;
+    text-align: center;
+  }
+  .focus-active-notice.show { display: block; }
+  .focus-active-notice span { color: var(--gold-dim); }
+
+  /* ── Focus overlay ── */
+  .focus-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(4, 4, 3, 0.97);
+    z-index: 100;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    text-align: center;
+    padding: 32px;
+  }
+  .focus-overlay.show { display: flex; }
+
+  .overlay-ornament {
+    font-size: 10px;
+    letter-spacing: 0.4em;
+    color: var(--gold-dim);
+    text-transform: uppercase;
+  }
+
+  .overlay-title {
+    font-size: 20px;
+    font-weight: 300;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text);
+  }
+
+  .overlay-timer {
+    font-family: 'Space Mono', monospace;
+    font-size: 64px;
+    font-weight: 400;
+    color: var(--gold);
+    letter-spacing: 4px;
+    text-shadow: 0 0 20px rgba(201,168,76,0.3);
+    line-height: 1;
+  }
+  .overlay-timer.pause { color: var(--gold-hi); opacity: 0.65; }
+
+  .overlay-subtitle {
+    font-size: 14px;
+    font-weight: 300;
+    font-style: italic;
+    color: var(--muted);
+    max-width: 260px;
+    line-height: 1.7;
+  }
+
+  .overlay-divider {
+    width: 60px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--gold-dim), transparent);
+  }
+
+  .blocked-list-overlay {
+    font-size: 11px;
+    font-style: italic;
+    color: var(--muted);
+    max-width: 300px;
+  }
+  .blocked-list-overlay strong { color: var(--gold-dim); font-weight: 400; }
+
+  .btn-exit-focus {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    padding: 8px 24px;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    cursor: pointer;
+    margin-top: 4px;
+    transition: border-color 0.2s, color 0.2s;
+  }
+  .btn-exit-focus:hover { border-color: var(--gold-dim); color: var(--gold-dim); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="brand">Modern Closer</div>
+  <div class="divider-line"></div>
+  <div class="mode-label" id="modeLabel">Temps de travail</div>
+</div>
+
+<div class="timer-card" id="timerCard">
+  <div class="glow"></div>
+
+  <div class="ring-wrap">
+    <svg viewBox="0 0 172 172">
+      <circle class="ring-track" cx="86" cy="86" r="76"/>
+      <circle class="ring-progress" id="ringProgress" cx="86" cy="86" r="76"/>
+    </svg>
+    <div class="time-display">
+      <div class="time-digits" id="timeDisplay">25:00</div>
+      <div class="session-count" id="sessionCount">session i</div>
+    </div>
+  </div>
+
+  <div class="sessions-log">
+    <div class="pip" id="pip-0"></div>
+    <div class="pip" id="pip-1"></div>
+    <div class="pip" id="pip-2"></div>
+    <div class="pip" id="pip-3"></div>
+  </div>
+
+  <div class="controls">
+    <button class="btn-icon" title="Réinitialiser" onclick="resetTimer()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+        <path d="M3 3v5h5"/>
+      </svg>
+    </button>
+
+    <button class="btn-main" id="btnMain" onclick="toggleTimer()">Démarrer</button>
+
+    <button class="btn-icon" title="Passer" onclick="skipPhase()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="5 4 15 12 5 20 5 4"/>
+        <line x1="19" y1="5" x2="19" y2="19"/>
+      </svg>
+    </button>
+  </div>
+</div>
+
+<div class="focus-bar">
+  <div class="focus-bar-header">
+    <span class="focus-title">Mode focus</span>
+    <div class="toggle-wrap" onclick="toggleFocusMode()">
+      <div class="toggle-track" id="toggleTrack">
+        <div class="toggle-thumb"></div>
+      </div>
+      <span class="toggle-label" id="toggleLabel">Désactivé</span>
+    </div>
+  </div>
+
+  <div class="blocklist-section" id="blocklistSection">
+    <div class="blocklist-items" id="blocklistItems"></div>
+    <div class="add-block-row">
+      <input class="add-block-input" id="blockInput" type="text"
+        placeholder="instagram.com, tiktok.com…" maxlength="60"
+        onkeydown="if(event.key==='Enter') addBlockItem()">
+      <button class="btn-add" onclick="addBlockItem()">Ajouter</button>
+    </div>
+  </div>
+
+  <div class="focus-active-notice" id="focusNotice">
+    Focus actif — <span id="blockCount">0</span> site(s) à éviter
+  </div>
+</div>
+
+<!-- Focus overlay -->
+<div class="focus-overlay" id="focusOverlay">
+  <div class="overlay-ornament">✦ Modern Closer ✦</div>
+  <div class="overlay-title">Mode focus</div>
+  <div class="overlay-divider"></div>
+  <div class="overlay-timer" id="overlayTimer">25:00</div>
+  <div class="overlay-subtitle" id="overlaySubtitle">Reste sur ta tâche.<br>La pause arrive bientôt.</div>
+  <div class="blocked-list-overlay" id="overlayBlockedList"></div>
+  <button class="btn-exit-focus" onclick="exitFocusOverlay()">Réduire</button>
+</div>
+
+<script>
+  const WORK_SECS  = 25 * 60;
+  const BREAK_SECS = 5  * 60;
+  const CIRC       = 2 * Math.PI * 76; // ≈ 477.5
+
+  const ROMAN = ['i','ii','iii','iv','v','vi','vii','viii'];
+
+  let totalSecs    = WORK_SECS;
+  let remaining    = WORK_SECS;
+  let isRunning    = false;
+  let isWork       = true;
+  let sessionsDone = 0;
+  let interval     = null;
+  let focusOn      = false;
+  let blockItems   = [];
+
+  const display      = document.getElementById('timeDisplay');
+  const ring         = document.getElementById('ringProgress');
+  const btnMain      = document.getElementById('btnMain');
+  const modeLabel    = document.getElementById('modeLabel');
+  const timerCard    = document.getElementById('timerCard');
+  const sessionCount = document.getElementById('sessionCount');
+  const overlayTimer = document.getElementById('overlayTimer');
+  const overlay      = document.getElementById('focusOverlay');
+  const overlaySub   = document.getElementById('overlaySubtitle');
+
+  function fmt(s) {
+    const m = Math.floor(s / 60), sec = s % 60;
+    return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+  }
+
+  function updateRing() {
+    const offset = CIRC * (1 - remaining / totalSecs);
+    ring.style.strokeDashoffset = offset;
+  }
+
+  function updateUI() {
+    const t = fmt(remaining);
+    display.textContent      = t;
+    overlayTimer.textContent = t;
+    updateRing();
+
+    const isPause = !isWork;
+    ring.className        = 'ring-progress' + (isPause ? ' pause' : '');
+    modeLabel.className   = 'mode-label' + (isPause ? ' pause' : '');
+    modeLabel.textContent = isPause ? 'Pause — recharge-toi' : 'Temps de travail';
+    btnMain.className     = 'btn-main' + (isPause ? ' pause-mode' : '');
+    timerCard.className   = 'timer-card' + (isPause ? ' pause-mode' : '');
+    overlayTimer.className= 'overlay-timer' + (isPause ? ' pause' : '');
+    overlaySub.innerHTML  = isPause
+      ? 'Lève-toi, respire,<br>hydrate-toi ☕'
+      : 'Reste sur ta tâche.<br>La pause arrive bientôt.';
+    const sIdx = Math.min(sessionsDone, ROMAN.length - 1);
+    sessionCount.textContent = 'session ' + ROMAN[sIdx];
+  }
+
+  function tick() {
+    if (remaining <= 0) {
+      clearInterval(interval);
+      isRunning = false;
+      playBeep();
+      if (isWork) { markPipDone(sessionsDone, false); sessionsDone++; }
+      else        { markPipDone(sessionsDone - 1, true); }
+      isWork    = !isWork;
+      totalSecs = isWork ? WORK_SECS : BREAK_SECS;
+      remaining = totalSecs;
+      btnMain.textContent = 'Démarrer';
+      updateUI();
+      return;
+    }
+    remaining--;
+    updateUI();
+  }
+
+  function toggleTimer() {
+    if (isRunning) {
+      clearInterval(interval);
+      isRunning = false;
+      btnMain.textContent = 'Reprendre';
+      if (focusOn) overlay.classList.remove('show');
+    } else {
+      interval  = setInterval(tick, 1000);
+      isRunning = true;
+      btnMain.textContent = 'Pause';
+      if (focusOn) showFocusOverlay();
+    }
+  }
+
+  function resetTimer() {
+    clearInterval(interval);
+    isRunning = false; isWork = true;
+    remaining = WORK_SECS; totalSecs = WORK_SECS;
+    sessionsDone = 0;
+    btnMain.textContent = 'Démarrer';
+    resetPips(); updateUI();
+    overlay.classList.remove('show');
+  }
+
+  function skipPhase() {
+    clearInterval(interval);
+    isRunning = false;
+    if (isWork) { markPipDone(sessionsDone, false); sessionsDone++; }
+    isWork    = !isWork;
+    totalSecs = isWork ? WORK_SECS : BREAK_SECS;
+    remaining = totalSecs;
+    btnMain.textContent = 'Démarrer';
+    updateUI();
+    overlay.classList.remove('show');
+  }
+
+  function markPipDone(idx, isBreak) {
+    const p = document.getElementById('pip-' + (idx % 4));
+    if (p) p.className = 'pip ' + (isBreak ? 'pause-done' : 'done');
+  }
+  function resetPips() {
+    for (let i = 0; i < 4; i++) {
+      const p = document.getElementById('pip-' + i);
+      if (p) p.className = 'pip';
+    }
+  }
+
+  function playBeep() {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      [0, 0.25, 0.5].forEach(t => {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.connect(g); g.connect(ctx.destination);
+        o.frequency.value = isWork ? 783 : 523;
+        o.type = 'sine';
+        g.gain.setValueAtTime(0.2, ctx.currentTime + t);
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + 0.5);
+        o.start(ctx.currentTime + t);
+        o.stop(ctx.currentTime + t + 0.5);
+      });
+    } catch(e) {}
+  }
+
+  function toggleFocusMode() {
+    focusOn = !focusOn;
+    document.getElementById('toggleTrack').className = 'toggle-track' + (focusOn ? ' on' : '');
+    document.getElementById('toggleLabel').textContent = focusOn ? 'Activé' : 'Désactivé';
+    document.getElementById('blocklistSection').className = 'blocklist-section' + (focusOn ? ' visible' : '');
+    document.getElementById('focusNotice').className = 'focus-active-notice' + (focusOn ? ' show' : '');
+    if (!focusOn) overlay.classList.remove('show');
+    if (focusOn && isRunning) showFocusOverlay();
+    updateBlockCount();
+  }
+
+  function showFocusOverlay() {
+    const list = document.getElementById('overlayBlockedList');
+    list.innerHTML = blockItems.length
+      ? '✦ À éviter : <strong>' + blockItems.join(' · ') + '</strong>'
+      : '';
+    overlay.classList.add('show');
+  }
+
+  function exitFocusOverlay() { overlay.classList.remove('show'); }
+
+  function addBlockItem() {
+    const input = document.getElementById('blockInput');
+    const val   = input.value.trim().replace(/^https?:\/\//, '').replace(/\/.*/, '');
+    if (!val || blockItems.includes(val)) { input.value = ''; return; }
+    blockItems.push(val);
+    input.value = '';
+    renderBlocklist();
+    updateBlockCount();
+  }
+
+  function removeBlockItem(val) {
+    blockItems = blockItems.filter(b => b !== val);
+    renderBlocklist();
+    updateBlockCount();
+  }
+
+  function renderBlocklist() {
+    document.getElementById('blocklistItems').innerHTML = blockItems.map(b =>
+      `<span class="block-tag">${b}<button onclick="removeBlockItem('${b}')" title="Retirer">×</button></span>`
+    ).join('');
+  }
+
+  function updateBlockCount() {
+    document.getElementById('blockCount').textContent = blockItems.length;
+  }
+
+  updateUI();
+</script>
+</body>
+</html>
